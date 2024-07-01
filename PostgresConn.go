@@ -21,7 +21,6 @@ type Employee struct {
 }
 
 func main() {
-	runtime.GOMAXPROCS(8)
 	fmt.Println("postgress Conn.....")
 	insert()
 	// getAllEmployee()
@@ -36,48 +35,50 @@ func insert() {
 	fmt.Println(db.Ping())
 	fmt.Println(err)
 	employees := []Employee{}
-	for i := 0; i < 5000000; i++ {
+	for i := 0; i < 10000000; i++ {
 		employees = append(employees, Employee{Id: i, Name: fmt.Sprint("DHRUV", i), Designation: "SE"})
 	}
 	start := time.Now()
 	counter := 0
 	chunkSize := 10000
-	for j := 0; j < 10; j++ {
-		for i := 0; i < len(employees); i += chunkSize {
-			end := i + chunkSize
+	for i := 0; i < len(employees); i += chunkSize {
+		end := i + chunkSize
 
-			if end > len(employees) {
-				end = len(employees)
-			}
-
-			chunk := employees[i:end]
-			wg.Add(1)
-			counter++
-
-			go func(chunk []Employee, wg *sync.WaitGroup) {
-				values := make([]map[string]interface{}, len(chunk))
-				for j, emp := range chunk {
-					values[j] = map[string]interface{}{
-						"id":          emp.Id,
-						"name":        emp.Name,
-						"designation": emp.Designation,
-					}
-				}
-				// mut.Lock()
-				// fmt.Println(values[0])
-				sqlStatement := `INSERT INTO employee1 (id,name,designation) VALUES (:id, :name, :designation)`
-
-				_, err1 := db.NamedExec(sqlStatement, values)
-				if err1 != nil {
-					fmt.Println(err1)
-				}
-				// mut.Unlock()
-				defer wg.Done()
-			}(chunk, &wg)
+		if end > len(employees) {
+			end = len(employees)
 		}
-		wg.Wait()
+
+		chunk := employees[i:end]
+		wg.Add(1)
+		counter++
+
+		insertChunks := func(chunk []Employee, wg *sync.WaitGroup) {
+			values := make([]map[string]interface{}, len(chunk))
+			for j, emp := range chunk {
+				values[j] = map[string]interface{}{
+					"id":          emp.Id,
+					"name":        emp.Name,
+					"designation": emp.Designation,
+				}
+			}
+			// mut.Lock()
+			// fmt.Println(values[0])
+			sqlStatement := `INSERT INTO employee1 (id,name,designation) VALUES (:id, :name, :designation)`
+
+			_, err1 := db.NamedExec(sqlStatement, values)
+			if err1 != nil {
+				fmt.Println(err1)
+			}
+			// mut.Unlock()
+			defer wg.Done()
+		}
+		go insertChunks(chunk, &wg)
 	}
+	wg.Wait()
+
 	fmt.Println(time.Since(start).Seconds())
+	time.Sleep(10 * time.Millisecond)
+	fmt.Println(runtime.NumGoroutine())
 	fmt.Println("Inserted Successfully %d", counter)
 	fmt.Println(runtime.NumCPU())
 	// fmt.Println(runtime.GOMAXPROCS())
