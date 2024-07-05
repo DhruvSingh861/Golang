@@ -12,26 +12,37 @@ import (
 )
 
 type Employee struct {
-	// Each field has a struct tag in the form of db:"column_name".
-	// These tags are used by the sqlx library (and other similar libraries) to
-	// map the struct fields to the corresponding columns in a database table.
 	Id          int    "db:id"
 	Name        string `db:"name"`
 	Designation string `db:"designation"`
 }
 
+func (e Employee) String() string {
+	return fmt.Sprintf("%v, %v, %v", e.Id, e.Name, e.Designation)
+}
+
 func main() {
 	fmt.Println("postgress Conn.....")
+
 	insert()
 	// getAllEmployee()
+
+	time.Sleep(2 * time.Second)
+
+	fmt.Println(runtime.NumGoroutine())
+	fmt.Println(runtime.NumCPU())
+
+	// buf := make([]byte, 1<<16)//Allocate a buffer for the stack trace
+	// runtime.Stack(buf, true)  //Get stack traces of all goroutines
+	// fmt.Printf("%s", buf)
 }
 
 var wg sync.WaitGroup
 var mut sync.Mutex
 
 func insert() {
-
 	db, err := sqlx.Connect("postgres", "user=postgres dbname=test password=password host=localhost port=5432 sslmode=disable")
+	defer db.Close()
 	fmt.Println(db.Ping())
 	fmt.Println(err)
 	employees := []Employee{}
@@ -41,6 +52,7 @@ func insert() {
 	start := time.Now()
 	counter := 0
 	chunkSize := 10000
+
 	for i := 0; i < len(employees); i += chunkSize {
 		end := i + chunkSize
 
@@ -49,8 +61,6 @@ func insert() {
 		}
 
 		chunk := employees[i:end]
-		wg.Add(1)
-		counter++
 
 		insertChunks := func(chunk []Employee, wg *sync.WaitGroup) {
 			values := make([]map[string]interface{}, len(chunk))
@@ -72,31 +82,31 @@ func insert() {
 			// mut.Unlock()
 			defer wg.Done()
 		}
+		wg.Add(1)
+		counter++
 		go insertChunks(chunk, &wg)
 	}
 	wg.Wait()
-
 	fmt.Println(time.Since(start).Seconds())
-	time.Sleep(10 * time.Millisecond)
-	fmt.Println(runtime.NumGoroutine())
 	fmt.Println("Inserted Successfully %d", counter)
-	fmt.Println(runtime.NumCPU())
 	// fmt.Println(runtime.GOMAXPROCS())
 }
 
 func getAllEmployee() {
 	db, err := sqlx.Connect("postgres", "user=postgres dbname=test password=password host=localhost port=5432 sslmode=disable")
+	defer db.Close()
 	fmt.Println(db.Ping())
 	fmt.Println(err)
 
-	employee := Employee{}
-	rows, _ := db.Queryx("SELECT * FROM employee")
+	rows, _ := db.Queryx("SELECT * FROM employee1")
 
 	for rows.Next() {
-		err := rows.StructScan(&employee)
+		employee := Employee{}
+		err := rows.Scan(&employee.Id, &employee.Name, &employee.Designation)
 		if err != nil {
-			log.Fatalln(err)
+			fmt.Println(err)
+			// log.Fatalln(err)
 		}
-		log.Printf("%v\n", employee)
+		log.Println(employee)
 	}
 }
